@@ -1,0 +1,52 @@
+from flask import Flask, redirect, url_for, session, request, render_template_string
+from flask_dance.contrib.github import make_github_blueprint, github
+from textblob import TextBlob
+
+app = Flask(__name__)
+app.secret_key = "supersecretkey"  # Change this in production
+
+# GitHub OAuth setup
+github_bp = make_github_blueprint(
+    client_id="YOUR_GITHUB_CLIENT_ID",
+    client_secret="YOUR_GITHUB_CLIENT_SECRET",
+)
+app.register_blueprint(github_bp, url_prefix="/login")
+
+# HTML template
+TEMPLATE = """
+<!doctype html>
+<title>Sentiment Analysis</title>
+<h2>Social Media Sentiment Analysis</h2>
+{% if not github.authorized %}
+  <a href="{{ url_for('github.login') }}">Login with GitHub</a>
+{% else %}
+  <p>Welcome, {{ user_info["login"] }}!</p>
+  <form method="post">
+    <textarea name="text" rows="6" cols="60" placeholder="Paste social media conversation..."></textarea><br>
+    <input type="submit" value="Analyze Sentiment">
+  </form>
+  {% if sentiment %}
+    <p><strong>Sentiment Analysis Result:</strong></p>
+    <p>Polarity: {{ sentiment.polarity }}</p>
+    <p>Subjectivity: {{ sentiment.subjectivity }}</p>
+  {% endif %}
+{% endif %}
+"""
+
+@app.route("/", methods=["GET", "POST"])
+def home():
+    if not github.authorized:
+        return render_template_string(TEMPLATE)
+    
+    user_info = github.get("/user").json()
+    sentiment = None
+
+    if request.method == "POST":
+        user_input = request.form["text"]
+        analysis = TextBlob(user_input)
+        sentiment = {
+            "polarity": round(analysis.polarity, 3),
+            "subjectivity": round(analysis.subjectivity, 3)
+        }
+
+    return render_template_string(TEMPLATE,
